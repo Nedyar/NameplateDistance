@@ -1,0 +1,17 @@
+# Settings a running copy of the addon saves never belong in the repository.
+# The game writes them to WTF\Account\<account>\SavedVariables, outside the
+# addon folder; these catch a copy that ends up here.
+WTF/
+SavedVariables/
+/NameplateDistance.lua
+*.lua.bak
+
+# Release packages
+*.zip
+
+# Editors and the operating system
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store

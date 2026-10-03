@@ -1,0 +1,34 @@
+## Interface: 16001
+## Title: Nameplate Distance
+## Notes: Shows the distance to each unit on its nameplate, colored by how far away it is.
+## Notes-deDE: Zeigt auf der Namensplakette jeder Einheit ihre Entfernung, gefärbt nach Abstand.
+## Notes-esES: Muestra la distancia a cada unidad en su placa de nombre, coloreada según lo lejos que esté.
+## Notes-esMX: Muestra la distancia a cada unidad en su placa de nombre, coloreada según qué tan lejos esté.
+## Notes-frFR: Affiche la distance de chaque unité sur sa barre d'info, colorée selon l'éloignement.
+## Notes-itIT: Mostra la distanza di ogni unità sulla sua barra, colorata in base a quanto è lontana.
+## Notes-koKR: 각 대상의 이름표에 거리를 표시하고, 거리에 따라 색을 입힙니다.
+## Notes-ptBR: Mostra a distância de cada unidade na sua placa de identificação, colorida conforme o quão longe ela está.
+## Notes-ruRU: Показывает расстояние до каждой цели на ее индикаторе здоровья, окрашивая его по удаленности.
+## Notes-zhCN: 在每个单位的姓名板上显示距离，并按远近着色。
+## Notes-zhTW: 在每個單位的名條上顯示距離，並依遠近著色。
+## Author: Nedyar
+## Version: 0.4.0
+## SavedVariables: NameplateDistanceDB
+## IconTexture: Interface\Icons\INV_Misc_Spyglass_03
+
+Locales\Locales.lua
+Locales\deDE.lua
+Locales\esES.lua
+Locales\esMX.lua
+Locales\frFR.lua
+Locales\itIT.lua
+Locales\koKR.lua
+Locales\ptBR.lua
+Locales\ruRU.lua
+Locales\zhCN.lua
+Locales\zhTW.lua
+Core.lua
+Range.lua
+Colors.lua
+Nameplates.lua
+Options.lua
