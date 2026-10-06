@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+- **Lighter `/npd melee log`**: while it is not recording, the addon no longer prepares its log lines on every melee range change.
+
 ## 0.4.0 - First release
 
 - **Distance on every nameplate**, as a range such as `20-25 yd`, bracketed with your own spells (talents included), a few items and the interaction distances. Party and raid members get an exact number.

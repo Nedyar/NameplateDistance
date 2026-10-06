@@ -1423,6 +1423,14 @@ for _, name in ipairs(UISpecialFrames) do closes = closes or name == "NameplateD
 check(closes, "Escape closes the window")
 window.Edit.scripts.OnEscapePressed(window.Edit)
 check(not window.shown, "Escape in the text box closes the window")
+-- While not recording, the events build no log line (the target's details
+-- are only asked for one).
+local deadAsked, realUnitIsDead = 0, UnitIsDead
+UnitIsDead = function(...) deadAsked = deadAsked + 1 return realUnitIsDead(...) end
+M.Fire("PLAYER_TARGET_CHANGED")
+M.RangeEvents()
+eq(deadAsked, 0, "no log line built while not recording")
+UnitIsDead = realUnitIsDead
 -- /npd melee log: records the events, then opens the window with them.
 SlashCmdList.NAMEPLATEDISTANCE("melee log")
 check(Printed("recording range events: walk away from your target and back, then /npd melee log again%.") ~= nil,

@@ -586,10 +586,14 @@ local function Ask(func, ...)
     return ok and Show(value) or "error"
 end
 
+-- True while /npd melee log records and has room: the lines are only built
+-- then, so the events cost nothing more the rest of the time.
+local function Recording()
+    return logStart ~= nil and #meleeLog < MAX_LOG_LINES
+end
+
 local function Record(text, ...)
-    if logStart and #meleeLog < MAX_LOG_LINES then
-        meleeLog[#meleeLog + 1] = ("%7.1f s  "):format(GetTime() - logStart) .. text:format(...)
-    end
+    meleeLog[#meleeLog + 1] = ("%7.1f s  "):format(GetTime() - logStart) .. text:format(...)
 end
 
 -- The nameplate token of the target, or nil: whether the checks also answer
@@ -741,7 +745,9 @@ function Range.Init()
     ns.RegisterEvents(melee, "ACTION_RANGE_CHECK_UPDATE", "PLAYER_TARGET_CHANGED")
     melee:SetScript("OnEvent", function(_, event, slot, inRange, checksRange)
         if event == "PLAYER_TARGET_CHANGED" then
-            Record("target changed to %s", TargetInfo())
+            if Recording() then
+                Record("target changed to %s", TargetInfo())
+            end
             return
         end
         slot = Plain(slot)
@@ -751,7 +757,9 @@ function Range.Init()
         local seen = meleeEvents[slot] or { count = 0 }
         meleeEvents[slot] = seen
         seen.inRange, seen.checksRange, seen.time, seen.count = inRange, checksRange, GetTime(), seen.count + 1
-        Record("slot %d: in range %s, checks range %s", slot, Show(inRange), Show(checksRange))
+        if Recording() then
+            Record("slot %d: in range %s, checks range %s", slot, Show(inRange), Show(checksRange))
+        end
         local state = meleeState[slot]
         if state then
             checksRange, inRange = Plain(checksRange), Plain(inRange)

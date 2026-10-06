@@ -12,7 +12,7 @@
 ## Notes-zhCN: 在每个单位的姓名板上显示距离，并按远近着色。
 ## Notes-zhTW: 在每個單位的名條上顯示距離，並依遠近著色。
 ## Author: Nedyar
-## Version: 0.4.0
+## Version: 0.4.1
 ## SavedVariables: NameplateDistanceDB
 ## IconTexture: Interface\Icons\INV_Misc_Spyglass_03
 
