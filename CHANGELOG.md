@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2
+
+- **Right distances for friendly units**: spells cast on your pet (Dismiss Pet, Mend Pet, Eyes of the Beast...) answer for your pet, not for the unit asked about, so friendly units far away showed 8-10 yd (0-10 yd in combat). They are no longer used to measure.
+- **`/npd check` opens a window** you can copy the report from, like `/npd melee`.
+
 ## 0.4.1
 
 - **Lighter `/npd melee log`**: while it is not recording, the addon no longer prepares its log lines on every melee range change.

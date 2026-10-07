@@ -37,6 +37,7 @@ L["the answers change at: %s"] = "응답이 바뀌는 거리: %s"
 L["result: %s (group member); the nameplate shows %s"] = "결과: %s (파티원), 이름표 표시: %s"
 L["result: the checks say %s; the nameplate shows %s"] = "결과: 확인 결과 %s, 이름표 표시: %s"
 L["result: no check answered for this unit."] = "결과: 이 대상에 대해 응답한 확인이 없습니다."
+L["Press Ctrl+A, then Ctrl+C, to copy the text."] = "Ctrl+A를 누른 다음 Ctrl+C를 눌러 텍스트를 복사하세요."
 
 -- Main page
 L["Shows how far away each unit is on its nameplate. The game only tells addons whether a unit is in range of your spells, some items and interactions, so the distance is usually a range such as 20-25 yards. Party and raid members get an exact number."] = "각 대상의 이름표에 대상이 얼마나 떨어져 있는지 표시합니다. 게임은 대상이 주문, 일부 아이템, 상호작용의 사거리 안에 있는지만 애드온에 알려 주므로, 거리는 보통 20-25미터 같은 범위로 표시됩니다. 파티원과 공격대원은 정확한 숫자로 표시됩니다."

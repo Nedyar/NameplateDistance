@@ -37,6 +37,7 @@ L["the answers change at: %s"] = "ответы меняются на: %s"
 L["result: %s (group member); the nameplate shows %s"] = "результат: %s (участник группы); индикатор здоровья показывает %s"
 L["result: the checks say %s; the nameplate shows %s"] = "результат: проверки дают %s; индикатор здоровья показывает %s"
 L["result: no check answered for this unit."] = "результат: ни одна проверка не ответила для этой цели."
+L["Press Ctrl+A, then Ctrl+C, to copy the text."] = "Нажмите Ctrl+A, затем Ctrl+C, чтобы скопировать текст."
 
 -- Main page
 L["Shows how far away each unit is on its nameplate. The game only tells addons whether a unit is in range of your spells, some items and interactions, so the distance is usually a range such as 20-25 yards. Party and raid members get an exact number."] = "Показывает на индикаторе здоровья каждой цели, как далеко она находится. Игра сообщает модификациям только то, находится ли цель в радиусе действия ваших заклинаний, некоторых предметов и взаимодействий, поэтому расстояние обычно задано диапазоном, например 20-25 м. Для участников группы и рейда показывается точное число."

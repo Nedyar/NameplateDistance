@@ -62,7 +62,7 @@ in `NameplateDistanceDB`.
 | Command | What it does |
 |---|---|
 | `/npd` | Open the options |
-| `/npd check` | List the range checks that answer for your target and what they say |
+| `/npd check` | The range checks that answer for your target and what they say, in a window you can copy |
 | `/npd melee` | What each melee button on your bars says about your target, in a window you can copy (`/npd melee log` records the range events until you run it again) |
 | `/npd reset` | Restore the default settings |
 
@@ -73,7 +73,9 @@ in `NameplateDistanceDB`.
 - **Range checks.** Spells from your spellbook, items with a known range and
   the interaction distances (8 and 28 yards; a little less for Tauren and
   Undead). An item counts once the client has answered for it, and is
-  remembered from then on.
+  remembered from then on. Spells cast on your pet (Mend Pet, Dismiss Pet...)
+  answer for the pet, whatever unit they are asked about, so they are left
+  out.
 - **Spells that go quiet.** On WoW Forever a spell answers nothing, instead of
   "out of range", once the unit is out of its range. A spell that answered
   before for the same unit is therefore read as out of range.

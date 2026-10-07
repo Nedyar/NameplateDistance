@@ -55,6 +55,12 @@ local function Login(ns)
     M.Fire("PLAYER_ENTERING_WORLD")
 end
 
+-- The text of the report window (/npd check, /npd melee), "" while hidden.
+local function WindowText()
+    local window = rawget(_G, "NameplateDistanceReport")
+    return window and window.shown and window.Edit:GetText() or ""
+end
+
 local function PlateText(unit)
     local plate = M.plates[unit]
     for _, f in ipairs(M.allFrames) do
@@ -239,8 +245,14 @@ M.throwOnSpell = nil
 M.target = "nameplate1"
 before = #M.printed
 SlashCmdList.NAMEPLATEDISTANCE("check")
-check(#M.printed > before + 3, "/npd check prints a report")
-check(M.printed[#M.printed]:find("result") ~= nil, "report ends with a result: " .. tostring(M.printed[#M.printed]))
+eq(#M.printed, before, "/npd check writes nothing in the chat")
+eq(NameplateDistanceReport.title, "Nameplate Distance - /npd check", "/npd check opens the report window")
+check(WindowText():find("\n  result: [^\n]*$") ~= nil, "the report ends with a result: " .. WindowText():sub(-120))
+check(NameplateDistanceReport.Edit.focus, "the report is selected, ready to copy")
+M.target = nil
+SlashCmdList.NAMEPLATEDISTANCE("check")
+check(M.printed[#M.printed]:find("target something first%.$") ~= nil, "without a target, a line in the chat")
+M.target = "nameplate1"
 SlashCmdList.NAMEPLATEDISTANCE("")
 eq(M.openedCategory, M.mainCategory:GetID(), "/npd opens the settings category")
 
@@ -263,7 +275,7 @@ for _, r in ipairs(radios) do if r.checked and (r.value == "bands" or r.value ==
 eq(checkedCount, 1, "exactly one format radio checked")
 
 -- Color rows: edit a distance, which re-sorts.
-local edits = FindFrames(function(f) return f.kind == "EditBox" end)
+local edits = FindFrames(function(f) return f.kind == "EditBox" and f.template == "InputBoxTemplate" end)
 eq(#edits, ns.MAX_COLORS, "one distance box per possible row")
 edits[1]:SetFocus(); edits[1]:SetText("33"); edits[1]:ClearFocus()
 eq(ns.char.colors[#ns.char.colors].distance, 40, "rows re-sorted after edit (last)")
@@ -509,7 +521,7 @@ eq(PlateText("nameplate1"), "20-28 yd", "no rows: plain range")
 ns.ResetSettings()
 M.target = "nameplate1"
 SlashCmdList.NAMEPLATEDISTANCE("check")
-check(M.printed[#M.printed]:find("the checks say 20%-28 yd; the nameplate shows 20%-28 yd") ~= nil, "report shows both: " .. M.printed[#M.printed])
+check(WindowText():find("the checks say 20%-28 yd; the nameplate shows 20%-28 yd") ~= nil, "report shows both: " .. WindowText():sub(-120))
 
 -- The preview on the main page follows the format.
 local preview = FontStringWith("^20%-28 yd$")
@@ -1007,9 +1019,7 @@ eq(PlateText("nameplate2"), "35-40 yd", "at 37 yd again: exact now")
 -- /npd check explains it.
 M.target = "nameplate2"
 SlashCmdList.NAMEPLATEDISTANCE("check")
-local explained = false
-for _, line in ipairs(M.printed) do if line:find("Fireball: no answer %(out of range: it answered for this unit before%)") then explained = true end end
-check(explained, "the report explains the nothing")
+check(WindowText():find("Fireball: no answer (out of range: it answered for this unit before)", 1, true) ~= nil, "the report explains the nothing")
 eq(#M.errors, 0, "no errors for the lowbie")
 
 -- A spell that cannot apply to the unit (Polymorph on an undead) never pushes it farther.
@@ -1122,10 +1132,10 @@ for _, locale in ipairs({ "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR"
     local before = #M.printed
     SlashCmdList.NAMEPLATEDISTANCE("check")
     SlashCmdList.NAMEPLATEDISTANCE("help")
-    check(#M.printed > before + 5, locale .. ": report and help printed")
-    local reportLine = M.printed[#M.printed - 3]
-    check(reportLine:find(L["result: the checks say %s; the nameplate shows %s"]:format(ns.Yards("20-28"), UNITS[locale]), 1, true) ~= nil,
-        locale .. ": report line translated: " .. reportLine)
+    eq(#M.printed, before + 3, locale .. ": the help printed")
+    check(WindowText():find(L["result: the checks say %s; the nameplate shows %s"]:format(ns.Yards("20-28"), UNITS[locale]), 1, true) ~= nil,
+        locale .. ": report line translated: " .. WindowText():sub(-120))
+    check(FontStringPlain(L["Press Ctrl+A, then Ctrl+C, to copy the text."]) ~= nil, locale .. ": the window's hint translated")
     -- Buttons fit their translated text.
     for _, f in ipairs(FindFrames(function(f) return f.kind == "Button" and f.textValue == L["Adjust to class & talents"] end)) do
         check(f.w >= #f.textValue * 6 + 24, locale .. ": adjust button fits its text")
@@ -1148,13 +1158,9 @@ eq(ns.L["Text"], "Text", "unknown language falls back to English")
 ---------------------------------------------------------------------------
 -- Session 12: the target's melee reach, from the melee ability's button event.
 ---------------------------------------------------------------------------
+-- What the checks at a distance said in the last /npd check.
 local function SlotLabels(range)
-    local out = {}
-    for _, line in ipairs(M.printed) do
-        local found = line:match("^|cff33ccffNameplate Distance|r:   " .. range .. " yd %- (.*)$")
-        if found then out[#out + 1] = found end
-    end
-    return out[#out]
+    return WindowText():match("\n  " .. range .. " yd %- ([^\n]*)")
 end
 local function Printed(pattern)
     for _, line in ipairs(M.printed) do
@@ -1416,7 +1422,7 @@ check(report:find("; on target: action true, spell true; on nameplate1: action t
 check(report:find("No range events recorded yet: /npd melee log", 1, true) ~= nil, "the report says how to record")
 check(M.rangeChecks[1], "/npd melee enables the range events of every melee button")
 local window = NameplateDistanceReport
-eq(window.title, "Nameplate Distance - melee check", "the window's title")
+eq(window.title, "Nameplate Distance - /npd melee", "the window's title")
 check(window.Edit.focus and window.Edit.multiLine, "the text is in a focused multi-line box, ready to copy")
 local closes = false
 for _, name in ipairs(UISpecialFrames) do closes = closes or name == "NameplateDistanceReport" end
@@ -1646,6 +1652,50 @@ do
     ns.Colors.Adjust()
     check(ns.char.auto, "adjusting: the cat rows automatic again")
     eq(#M.errors, 0, "no errors for the druid")
+end
+
+---------------------------------------------------------------------------
+-- Session 14: spells cast on the pet are not checks.
+---------------------------------------------------------------------------
+do
+    -- Seen in game: Dismiss Pet said "in range" for a party member 16.2 yards
+    -- away, and every friendly unit far away showed 8-10 yd (0-10 in
+    -- combat). It answers for the pet, wherever the unit is.
+    local spells = CopyTable(HUNTER_SPELLS)
+    for i = #spells, 1, -1 do
+        if spells[i].name == "Mend Pet" then table.remove(spells, i) end
+    end
+    for _, s in ipairs({
+        { id = 136, name = "Mend Pet", min = 0, max = 20, helpful = true, pet = true },
+        { id = 2641, name = "Dismiss Pet", min = 0, max = 10, helpful = true, pet = true },
+        { id = 1002, name = "Eyes of the Beast", min = 0, max = 50000, helpful = true, pet = true },
+    }) do
+        spells[#spells + 1] = s
+    end
+    ns = NewSession()
+    M.class = "HUNTER"
+    M.SetSpells(spells)
+    M.petDistance = 3
+    Login(ns)
+    M.AddUnit("nameplate1", { d = 50, friendly = true, name = "Snooker" })
+    M.Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    for _, combat in ipairs({ false, true }) do
+        M.combat = combat
+        for _, d in ipairs({ 50, 16, 12 }) do
+            M.units.nameplate1.d = d
+            local low, high = ns.Range.GetRange("nameplate1", "friendly")
+            check(low == nil or (low <= d and d <= high), ("a friendly unit at %s yd%s is not put nearer than it is (got %s-%s)")
+                :format(d, combat and " in combat" or "", tostring(low), tostring(high)))
+        end
+    end
+    M.combat = false
+    M.units.nameplate1.d = 50
+    M.Tick(0.2)
+    check(PlateText("nameplate1") ~= "8-10 yd", "the far friendly unit does not show 8-10 yd: " .. tostring(PlateText("nameplate1")))
+    M.target = "nameplate1"
+    SlashCmdList.NAMEPLATEDISTANCE("check")
+    check(not WindowText():find("Pet") and not WindowText():find("Eyes of the Beast"), "/npd check lists no pet spell: " .. WindowText())
+    eq(#M.errors, 0, "no errors with the pet spells")
 end
 
 ---------------------------------------------------------------------------

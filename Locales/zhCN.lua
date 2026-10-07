@@ -37,6 +37,7 @@ L["the answers change at: %s"] = "应答变化的距离：%s"
 L["result: %s (group member); the nameplate shows %s"] = "结果：%s（队伍成员）；姓名板显示 %s"
 L["result: the checks say %s; the nameplate shows %s"] = "结果：检测结果为 %s；姓名板显示 %s"
 L["result: no check answered for this unit."] = "结果：没有检测对该单位应答。"
+L["Press Ctrl+A, then Ctrl+C, to copy the text."] = "按 Ctrl+A，然后按 Ctrl+C 复制文本。"
 
 -- Main page
 L["Shows how far away each unit is on its nameplate. The game only tells addons whether a unit is in range of your spells, some items and interactions, so the distance is usually a range such as 20-25 yards. Party and raid members get an exact number."] = "在每个单位的姓名板上显示它离你有多远。游戏只告诉插件某个单位是否在你的法术、某些物品和交互的范围内，因此距离通常是一个范围，例如20-25码。队伍和团队成员会显示精确数值。"

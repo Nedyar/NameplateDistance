@@ -57,6 +57,21 @@ local INTERACT_BY_RACE = {
     Scourge = { [3] = 7, [4] = 27 },
 }
 
+-- Spells cast on the player's pet answer for the pet, whatever unit they are
+-- asked about: measured in game (2026-10-07, /npd check on a party member at
+-- 16.2 yards), Dismiss Pet (10 yards) said "in range", and Mend Pet and Eyes
+-- of the Beast answered too. They are never checks. By the first rank's ID;
+-- the other ranks share the name.
+local PET_SPELLS = {
+    136,    -- Mend Pet
+    2641,   -- Dismiss Pet
+    982,    -- Revive Pet
+    1002,   -- Eyes of the Beast
+    6991,   -- Feed Pet
+    19574,  -- Bestial Wrath
+    755,    -- Health Funnel (warlock)
+}
+
 -- Probes answer true (in range), false (out of range) or nil (cannot tell).
 
 local function SpellProbe(spellID, unit)
@@ -207,6 +222,13 @@ local function AddProbe(list, maxRange, minRange, test, arg, combatSafe, label)
 end
 
 local function AddSpells()
+    local petSpells = {}
+    for _, spellID in ipairs(PET_SPELLS) do
+        local info = C_Spell.GetSpellInfo(spellID)
+        if info and info.name then
+            petSpells[info.name] = true
+        end
+    end
     local bank = Enum.SpellBookSpellBank.Player
     local spellType = Enum.SpellBookItemType.Spell
     for line = 1, C_SpellBook.GetNumSpellBookSkillLines() do
@@ -216,7 +238,7 @@ local function AddSpells()
                 local item = C_SpellBook.GetSpellBookItemInfo(index, bank)
                 local spellID = item and item.itemType == spellType and not item.isPassive and not item.isOffSpec and item.spellID
                 local spell = spellID and C_Spell.GetSpellInfo(spellID)
-                local maxRange = spell and Plain(spell.maxRange)
+                local maxRange = spell and not petSpells[spell.name] and Plain(spell.maxRange)
                 -- Melee abilities report 0-0: no distance to check (see the top).
                 if maxRange and maxRange > 0 then
                     maxRange = math.floor(maxRange + 0.5)
@@ -519,46 +541,6 @@ function Range.GetRange(unit, category)
     return math.min(low, high), high
 end
 
--- /npd check: which checks answer for the unit, and what they say.
-function Range.Report(unit)
-    if not Plain(UnitExists(unit)) then
-        ns.Print(L["target something first."])
-        return
-    end
-    local category = Range.GetCategory(unit)
-    local restricted = IsRestricted(category)
-    local memory = Memory(unit) or {}
-    local categoryNames = { hostile = L["hostile unit"], friendly = L["friendly unit"], other = L["other unit"] }
-    ns.Print("%s: %s, %s.", Plain(UnitName(unit)) or "?", categoryNames[category], InCombatLockdown() and L["in combat"] or L["out of combat"])
-    for _, list in ipairs({ slots[category], minSlots[category] }) do
-        for _, slot in ipairs(list) do
-            local answers = {}
-            for _, probe in ipairs(slot) do
-                local answer = L["skipped in combat"]
-                if probe.combatSafe or not restricted then
-                    local ok, inRange = pcall(probe.test, probe.arg, unit)
-                    answer = not ok and L["error"] or inRange and L["in range"] or inRange == false and L["out of range"]
-                        or memory[probe] and L["no answer (out of range: it answered for this unit before)"] or L["no answer"]
-                end
-                answers[#answers + 1] = probe.label .. ": " .. answer
-            end
-            local range = slot.minRange > 0 and (slot.minRange .. "-" .. slot.range) or tostring(slot.range)
-            ns.Print("  %s - %s", ns.Yards(range), table.concat(answers, ", "))
-        end
-    end
-    ns.Print("  " .. L["the answers change at: %s"], ns.Yards(table.concat(Range.GetMarks(category), ", ")))
-    local exact = Plain(UnitIsPlayer(unit)) and Range.GetExactDistance(unit)
-    local low, high = Range.GetRange(unit, category)
-    if exact then
-        ns.Print("  " .. L["result: %s (group member); the nameplate shows %s"], ns.Yards(("%.1f"):format(exact)), (ns.FormatDistance(nil, nil, exact)))
-    elseif low then
-        local checks = high == INF and (low .. "+") or low == high and tostring(low) or (low .. "-" .. high)
-        ns.Print("  " .. L["result: the checks say %s; the nameplate shows %s"], ns.Yards(checks), (ns.FormatDistance(low, high)))
-    else
-        ns.Print("  " .. L["result: no check answered for this unit."])
-    end
-end
-
 -- /npd melee: a diagnostic, in English, of the melee range answers on WoW
 -- Forever (it showed that Raptor Strike's cannot be used; see the melee check
 -- above). A window shows, ready to copy, what each melee button on the
@@ -678,8 +660,9 @@ end
 
 local reportWindow
 
--- A window with the text selected, to copy with Ctrl+C.
-local function ShowReport(text)
+-- A window with the text selected, to copy with Ctrl+C; /npd check and
+-- /npd melee share it.
+local function ShowReport(title, text)
     if not reportWindow then
         local window = CreateFrame("Frame", "NameplateDistanceReport", UIParent, "PortraitFrameTemplate")
         window:SetSize(680, 460)
@@ -690,15 +673,14 @@ local function ShowReport(text)
         window:RegisterForDrag("LeftButton")
         window:SetScript("OnDragStart", window.StartMoving)
         window:SetScript("OnDragStop", window.StopMovingOrSizing)
-        window:SetPortraitToAsset("Interface\\Icons\\Ability_MeleeDamage")
-        window:SetTitle("Nameplate Distance - melee check")
+        window:SetPortraitToAsset("Interface\\Icons\\INV_Misc_Spyglass_03")
         tinsert(UISpecialFrames, window:GetName())
 
         local hint = window:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         hint:SetPoint("TOPLEFT", 70, -36)
         hint:SetPoint("RIGHT", -20, 0)
         hint:SetJustifyH("LEFT")
-        hint:SetText("Press Ctrl+A, then Ctrl+C, to copy the text.")
+        hint:SetText(L["Press Ctrl+A, then Ctrl+C, to copy the text."])
 
         local scroll = CreateFrame("ScrollFrame", nil, window, "UIPanelScrollFrameTemplate")
         scroll:SetPoint("TOPLEFT", 16, -66)
@@ -717,24 +699,70 @@ local function ShowReport(text)
         window.Edit = edit
         reportWindow = window
     end
+    reportWindow:SetTitle(title)
     reportWindow.Edit:SetText(text)
     reportWindow:Show()
     reportWindow.Edit:SetFocus()
     reportWindow.Edit:HighlightText()
 end
 
+-- /npd check: which checks answer for the unit, and what they say.
+function Range.Report(unit)
+    if not Plain(UnitExists(unit)) then
+        ns.Print(L["target something first."])
+        return
+    end
+    local lines = {}
+    local function Add(text, ...)
+        lines[#lines + 1] = select("#", ...) > 0 and text:format(...) or text
+    end
+    local category = Range.GetCategory(unit)
+    local restricted = IsRestricted(category)
+    local memory = Memory(unit) or {}
+    local categoryNames = { hostile = L["hostile unit"], friendly = L["friendly unit"], other = L["other unit"] }
+    Add("%s: %s, %s.", Plain(UnitName(unit)) or "?", categoryNames[category], InCombatLockdown() and L["in combat"] or L["out of combat"])
+    for _, list in ipairs({ slots[category], minSlots[category] }) do
+        for _, slot in ipairs(list) do
+            local answers = {}
+            for _, probe in ipairs(slot) do
+                local answer = L["skipped in combat"]
+                if probe.combatSafe or not restricted then
+                    local ok, inRange = pcall(probe.test, probe.arg, unit)
+                    answer = not ok and L["error"] or inRange and L["in range"] or inRange == false and L["out of range"]
+                        or memory[probe] and L["no answer (out of range: it answered for this unit before)"] or L["no answer"]
+                end
+                answers[#answers + 1] = probe.label .. ": " .. answer
+            end
+            local range = slot.minRange > 0 and (slot.minRange .. "-" .. slot.range) or tostring(slot.range)
+            Add("  %s - %s", ns.Yards(range), table.concat(answers, ", "))
+        end
+    end
+    Add("  " .. L["the answers change at: %s"], ns.Yards(table.concat(Range.GetMarks(category), ", ")))
+    local exact = Plain(UnitIsPlayer(unit)) and Range.GetExactDistance(unit)
+    local low, high = Range.GetRange(unit, category)
+    if exact then
+        Add("  " .. L["result: %s (group member); the nameplate shows %s"], ns.Yards(("%.1f"):format(exact)), (ns.FormatDistance(nil, nil, exact)))
+    elseif low then
+        local checks = high == INF and (low .. "+") or low == high and tostring(low) or (low .. "-" .. high)
+        Add("  " .. L["result: the checks say %s; the nameplate shows %s"], ns.Yards(checks), (ns.FormatDistance(low, high)))
+    else
+        Add("  " .. L["result: no check answered for this unit."])
+    end
+    ShowReport("Nameplate Distance - /npd check", table.concat(lines, "\n"))
+end
+
 function Range.MeleeReport(option)
     if option == "log" then
         if logStart then
             logStart = nil
-            ShowReport(MeleeReportText())
+            ShowReport("Nameplate Distance - /npd melee", MeleeReportText())
         else
             meleeLog, logStart = {}, GetTime()
             ns.Print("recording range events: walk away from your target and back, then /npd melee log again.")
         end
         return
     end
-    ShowReport(MeleeReportText())
+    ShowReport("Nameplate Distance - /npd melee", MeleeReportText())
 end
 
 function Range.Init()

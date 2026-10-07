@@ -379,6 +379,11 @@ C_Spell = {
         local s, u = spellByID[id], U(unit)
         if M.throwOnSpell then error("simulated API failure") end
         if not u then return nil end
+        -- As on Forever, a spell cast on the pet answers for the pet (M.petDistance).
+        if s.pet then
+            if not M.petDistance then return nil end
+            return M.petDistance <= s.max
+        end
         if s.melee then return true end -- as Raptor Strike on Forever: in range at any distance
         if s.harmful and not u.hostile then return nil end
         if s.helpful and not u.friendly then return nil end

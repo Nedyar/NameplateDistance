@@ -37,6 +37,7 @@ L["the answers change at: %s"] = "les réponses changent à : %s"
 L["result: %s (group member); the nameplate shows %s"] = "résultat : %s (membre du groupe) ; la barre d'info affiche %s"
 L["result: the checks say %s; the nameplate shows %s"] = "résultat : les vérifications indiquent %s ; la barre d'info affiche %s"
 L["result: no check answered for this unit."] = "résultat : aucune vérification n'a répondu pour cette unité."
+L["Press Ctrl+A, then Ctrl+C, to copy the text."] = "Appuyez sur Ctrl+A, puis Ctrl+C, pour copier le texte."
 
 -- Main page
 L["Shows how far away each unit is on its nameplate. The game only tells addons whether a unit is in range of your spells, some items and interactions, so the distance is usually a range such as 20-25 yards. Party and raid members get an exact number."] = "Affiche sur la barre d'info de chaque unité à quelle distance elle se trouve. Le jeu indique seulement aux add-ons si une unité est à portée de vos sorts, de certains objets et des interactions ; la distance est donc généralement une plage comme 20-25 m. Les membres du groupe et du raid ont un nombre exact."
