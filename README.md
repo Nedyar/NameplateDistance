@@ -20,22 +20,33 @@ each nameplate how far away the unit is, colored by distance.
   check.
 - **Colors by class.** Each character gets color rows set up from its class
   and from the distances its range checks can tell apart, so the numbers on
-  the nameplates match the rows:
+  the nameplates match the rows. Enemies and friendly units have rows of
+  their own:
   - Hunters: green in melee range, red in the dead zone, green in the middle
     of the shooting range, red past it, grey past Hunter's Mark.
   - Warriors, rogues, and druids in cat or bear form: green in melee range;
     with a charge, red up to its minimum range and light green within its
     range; then yellow to orange up to their longest ability, red past it.
-    Druids keep separate rows for their own form, cat form and bear form.
+    Druids keep separate rows for their caster form, cat form and bear form,
+    and can edit any of them from any form.
   - Other classes: green up close to red past their longest spell.
+  - Friendly and neutral units: green up close to red past your longest
+    helpful spell, or past your farthest check if you have none.
 
-  The rows follow new spells and talents until you edit one. **Adjust to
-  class & talents** sets them up again.
+  The rows follow new spells and talents until you edit one. On the Colors
+  page, **Reset these colors** sets the rows shown up again, and **Reset all
+  colors** every set of rows of the character.
 - **Display options.** Where the text sits on the health bar (nine points,
   inside or next to it, with offsets), font size and outline, the format
   (the color rows' ranges, `20-25`, `25` or `~23`), the distance color on the
   text and on the unit's name, enemies and friendly units, only your target,
   hiding "more than" distances, and how often it updates.
+- **Mouseover range on the action buttons** (off by default). While the
+  mouse is over a unit, every action button with a key bound shows a small
+  mouse icon in its lower left corner: in the key's color when the unit is
+  within that ability's range, red when it is not, the way the key turns red
+  for your target. Handy for casting on the unit under the mouse with your
+  keys.
 - **Every client language.** The texts are in English, German, Spanish (EU
   and Latin America), French, Italian, Korean, Portuguese (Brazil, also used
   by Portugal's client), Russian and Chinese (simplified and traditional).
@@ -72,10 +83,11 @@ in `NameplateDistanceDB`.
 
 - **Range checks.** Spells from your spellbook, items with a known range and
   the interaction distances (8 and 28 yards; a little less for Tauren and
-  Undead). An item counts once the client has answered for it, and is
-  remembered from then on. Spells cast on your pet (Mend Pet, Dismiss Pet...)
-  answer for the pet, whatever unit they are asked about, so they are left
-  out.
+  Undead). An item, or a spell that helps friendly units, counts once the
+  client has answered for it, and is remembered from then on: some never
+  answer for a unit (Eagle Eye, Aspect of the Monkey). Spells cast on your pet
+  (Mend Pet, Dismiss Pet...) answer for the pet, whatever unit they are asked
+  about, so they are left out.
 - **Spells that go quiet.** On WoW Forever a spell answers nothing, instead of
   "out of range", once the unit is out of its range. A spell that answered
   before for the same unit is therefore read as out of range.
@@ -89,8 +101,9 @@ in `NameplateDistanceDB`.
 | `Locales\` | Translations, one file per language; the English text is the key |
 | `Core.lua` | Settings, shared helpers, startup, slash commands |
 | `Range.lua` | Range checks, the target's melee reach, `/npd check` and `/npd melee` |
-| `Colors.lua` | The color rows of each class, character and druid form |
+| `Colors.lua` | The color rows of each class and character: enemies (per druid form) and friendly units |
 | `Nameplates.lua` | The distance text and the name color on Blizzard's nameplates |
+| `MouseoverRange.lua` | The mouseover range icon on the action buttons |
 | `Options.lua` | The settings pages |
 | `Tests\` | Offline tests (not loaded by the game) |
 | `.github\logo.png` | The project logo (not part of the addon) |

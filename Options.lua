@@ -244,18 +244,32 @@ local function CreatePreview(page, x, y)
     return bar, box:CreateFontString(nil, "OVERLAY"), name
 end
 
+-- The section of rows the Colors page edits (see Colors.lua): the enemies'
+-- rows, of a druid form for a druid, or those of friendly and neutral units.
+local editFriendly = false
+local editForm          -- the druid form edited; it follows the form in use
+
+local function EditedSection()
+    return editFriendly and ns.Colors.FRIENDLY or (editForm or ns.Colors.GetSet())
+end
+
+local function Edited()
+    return ns.Colors.GetEntry(ns.Colors.GetKey(EditedSection()))
+end
+
 local function PickColor(color)
     if not ColorPickerFrame then
         C_AddOns.LoadAddOn("Blizzard_ColorPickerFrame")
     end
+    local entry = Edited()
     local r, g, b = color.r, color.g, color.b
-    local wasAuto = ns.char.auto
+    local wasAuto = entry.auto
     local function Apply(newR, newG, newB)
         local before = ns.ColorToHex(color)
         color.r, color.g, color.b = newR, newG, newB
         -- The picker also calls this when it opens, with the same color.
         if ns.ColorToHex(color) ~= before then
-            ns.char.auto = false
+            entry.auto = false
         end
         ns.SettingsChanged()
         Options.Refresh()
@@ -270,7 +284,7 @@ local function PickColor(color)
         end,
         cancelFunc = function()
             Apply(r, g, b)
-            ns.char.auto = wasAuto
+            entry.auto = wasAuto
             Options.Refresh()
         end,
     })
@@ -334,11 +348,12 @@ local function CreateColorRow(page, index, top)
         self:ClearFocus()
     end)
     distance:HookScript("OnEditFocusLost", function(self)
-        local color, value = ns.char.colors[index], tonumber(self:GetText())
+        local entry = Edited()
+        local color, value = entry.colors[index], tonumber(self:GetText())
         if color and value and value >= 1 and value ~= color.distance and not self.cancelled then
             color.distance = value
-            ns.char.auto = false
-            ns.SortColors(ns.char.colors)
+            entry.auto = false
+            ns.SortColors(entry.colors)
             ns.SettingsChanged()
         end
         self.cancelled = nil
@@ -349,7 +364,7 @@ local function CreateColorRow(page, index, top)
     yards:SetPoint("LEFT", distance, "RIGHT", 6, 0)
     yards:SetText(L["yd"])
 
-    local swatch = CreateSwatch(row, function() return ns.char.colors[index] end)
+    local swatch = CreateSwatch(row, function() return Edited().colors[index] end)
     swatch:SetPoint("LEFT", SWATCH_X, 0)
 
     local remove = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
@@ -358,8 +373,9 @@ local function CreateColorRow(page, index, top)
     remove:SetText(L["Remove"])
     FitButton(remove, 80)
     remove:SetScript("OnClick", function()
-        table.remove(ns.char.colors, index)
-        ns.char.auto = false
+        local entry = Edited()
+        table.remove(entry.colors, index)
+        entry.auto = false
         ns.SettingsChanged()
         Options.Refresh()
     end)
@@ -372,7 +388,8 @@ local function CreateColorRow(page, index, top)
     warning:SetText(L["not a check distance"])
 
     function row.Refresh(isMark)
-        local color, above = ns.char.colors[index], ns.char.colors[index - 1]
+        local colors = Edited().colors
+        local color, above = colors[index], colors[index - 1]
         row:SetShown(color ~= nil)
         if color then
             from:SetText((above and above.distance or 0) .. " -")
@@ -445,9 +462,14 @@ local function CreateMainPage()
     CreateOption(page, 336, -426, "colorName", L["Color the unit's name"],
         L["The name on Blizzard's nameplates takes the distance color, instead of Blizzard's own colors (class, reaction, tapped, mouseover). Friendly nameplates inside dungeons and raids are closed to addons, so their names keep their color."])
 
+    -- The game's own name for the action bars, in the client's language.
+    CreateHeader(page, ACTIONBARS_LABEL or "Action Bars", 16, -464, 624)
+    CreateOption(page, 12, -486, "mouseoverIcon", L["Mouseover range icon"],
+        L["Action buttons with a key bound show a small mouse icon in their lower left corner while the mouse is over a unit: in the key's color when the unit is within that ability's range, red when it is not, as the key turns red for your target."])
+
     local reset = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
     reset:SetSize(160, 22)
-    reset:SetPoint("TOPLEFT", 16, -470)
+    reset:SetPoint("TOPLEFT", 16, -530)
     reset:SetText(L["Reset all settings"])
     FitButton(reset, 160)
     reset:SetScript("OnClick", function()
@@ -462,12 +484,74 @@ local function CreateMainPage()
     return page, previewBar, previewText, previewName
 end
 
+-- A label followed by radio buttons, on a line below anchor; get returns the
+-- chosen value and set changes it. Returns the line, for what comes below.
+local function CreateSelector(page, anchor, label, choices, get, set)
+    local line = CreateFrame("Frame", nil, page)
+    line:SetSize(620, 20)
+    line:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -10)
+    local title = line:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    title:SetPoint("LEFT")
+    title:SetText(label)
+    local buttons = {}
+    for i, choice in ipairs(choices) do
+        local button = CreateFrame("CheckButton", nil, line, "UIRadioButtonTemplate")
+        if i == 1 then
+            button:SetPoint("LEFT", title, "RIGHT", 10, 0)
+        else
+            button:SetPoint("LEFT", buttons[i - 1].text, "RIGHT", 14, 0)
+        end
+        button.text:SetFontObject("GameFontHighlightSmall")
+        button.text:SetText(choice.text)
+        button:SetHitRectInsets(0, -(button.text:GetStringWidth() + 5), 0, 0)
+        button.value = choice.value
+        button:SetScript("OnClick", function(self)
+            set(self.value)
+            Options.Refresh()
+        end)
+        buttons[i] = button
+    end
+    refreshers[#refreshers + 1] = function()
+        for _, button in ipairs(buttons) do
+            button:SetChecked(get() == button.value)
+        end
+    end
+    return line
+end
+
+local INTRO = L["Each character has its own rows, set up from its class and from the distances at which its range checks change answer, which include its talents; the nameplates show exactly these ranges. Enemies and friendly units have rows of their own."]
+local ENEMIES_INTRO = L["Hunters: green in melee range, red in the dead zone and past the shooting range, green in the middle of it, grey past Hunter's Mark. Warriors, rogues, and druids in cat or bear form, each form with its own rows: green in melee range; with a charge, red up to its minimum range and light green within its range; then yellow to orange up to their longest ability, red past it. Other classes: green up close to red past their longest spell."]
+local FRIENDLY_INTRO = L["Friendly and neutral units: green up close to red past your longest helpful spell, or past your farthest check if you have none."]
+
 local function CreateColorsPage()
-    local page = CreatePage(L["Colors by distance"],
-        L["Each character has its own rows, set up from its class and from the distances at which its range checks change answer, which include its talents; the nameplates show exactly these ranges. Hunters: green in melee range, red in the dead zone and past the shooting range, green in the middle of it, grey past Hunter's Mark. Warriors, rogues, and druids in cat or bear form, each form with its own rows: green in melee range; with a charge, red up to its minimum range and light green within its range; then yellow to orange up to their longest ability, red past it. Other classes: green up close to red past their longest spell."])
+    local page = CreatePage(L["Colors by distance"], INTRO)
+    local forms = ns.Colors.GetForms()
+
+    -- The druid form edited follows the form in use, until another is picked.
+    local seenSet
+    refreshers[#refreshers + 1] = function()
+        local set = ns.Colors.GetSet()
+        if set ~= seenSet then
+            seenSet, editForm = set, set
+        end
+    end
+
+    local kindLine = CreateSelector(page, page.intro, L["Colors for:"], {
+        { value = false, text = L["Enemies"] },
+        { value = true, text = L["Friendly and neutral units"] },
+    }, function() return editFriendly end, function(value) editFriendly = value end)
+
+    local formLine
+    if forms then
+        local choices = {}
+        for i, form in ipairs(forms) do
+            choices[i] = { value = form.set, text = form.name }
+        end
+        formLine = CreateSelector(page, kindLine, L["Form:"], choices,
+            function() return editForm end, function(value) editForm = value end)
+    end
 
     local marksNote = page:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    marksNote:SetPoint("TOPLEFT", page.intro, "BOTTOMLEFT", 0, -10)
     marksNote:SetWidth(620)
     marksNote:SetJustifyH("LEFT")
 
@@ -491,38 +575,54 @@ local function CreateColorsPage()
     farRow:SetSize(400, 24)
     local farLabel = farRow:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     farLabel:SetPoint("LEFT", 8, 0)
-    local farSwatch = CreateSwatch(farRow, function() return ns.char.farColor end)
+    local farSwatch = CreateSwatch(farRow, function() return Edited().farColor end)
     farSwatch:SetPoint("LEFT", SWATCH_X, 0)
+
+    local function Category()
+        return editFriendly and "friendly" or "hostile"
+    end
 
     local add = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
     add:SetSize(120, 22)
     add:SetText(L["Add color"])
     FitButton(add, 120)
     add:SetScript("OnClick", function()
-        local colors = ns.char.colors
+        local entry = Edited()
+        local colors = entry.colors
         local lastDistance = colors[#colors] and colors[#colors].distance or 0
         -- The next check distance, so the new row gives exact ranges too.
         local distance = lastDistance + 5
-        for _, mark in ipairs(ns.Range.GetMarks("hostile")) do
+        for _, mark in ipairs(ns.Range.GetMarks(Category())) do
             if mark > lastDistance then
                 distance = mark
                 break
             end
         end
         colors[#colors + 1] = { distance = math.min(distance, 999), r = 1, g = 1, b = 1 }
-        ns.char.auto = false
+        entry.auto = false
         ns.SettingsChanged()
         Options.Refresh()
     end)
 
     local adjust = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
-    adjust:SetSize(190, 22)
+    adjust:SetSize(150, 22)
     adjust:SetPoint("LEFT", add, "RIGHT", 10, 0)
-    adjust:SetText(L["Adjust to class & talents"])
-    FitButton(adjust, 190)
-    adjust:SetScript("OnClick", ns.Colors.Adjust)
-    SetTooltip(adjust, L["Adjust to class & talents"],
+    adjust:SetText(L["Reset these colors"])
+    FitButton(adjust, 150)
+    adjust:SetScript("OnClick", function()
+        ns.Colors.Adjust(EditedSection())
+    end)
+    SetTooltip(adjust, L["Reset these colors"],
         L["Sets the rows up again from your class and your current range checks, which include your talents, replacing the ones you edited. From then on they follow new spells and talents by themselves."])
+
+    local adjustAll = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+    adjustAll:SetSize(150, 22)
+    adjustAll:SetPoint("LEFT", adjust, "RIGHT", 10, 0)
+    adjustAll:SetText(L["Reset all colors"])
+    FitButton(adjustAll, 150)
+    adjustAll:SetScript("OnClick", ns.Colors.AdjustAll)
+    SetTooltip(adjustAll, L["Reset all colors"],
+        L["Sets every row of this character up again from its class and its current range checks: enemies, friendly units and, for a druid, every form."])
 
     local examples = page:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     examples:SetPoint("TOPLEFT", add, "BOTTOMLEFT", 0, -20)
@@ -531,24 +631,37 @@ local function CreateColorsPage()
 
     -- The settings panel's Defaults button.
     function page:OnDefault()
-        ns.Colors.Adjust()
+        ns.Colors.AdjustAll()
     end
 
     refreshers[#refreshers + 1] = function()
-        local colors, marks, isMark = ns.char.colors, ns.Range.GetMarks("hostile"), {}
+        local section = EditedSection()
+        local entry = ns.Colors.GetRows(section)
+        page.intro:SetText(INTRO .. " " .. (editFriendly and FRIENDLY_INTRO or ENEMIES_INTRO))
+        -- The forms only apply to the enemies' rows.
+        local showForms = formLine and not editFriendly
+        if formLine then
+            formLine:SetShown(showForms)
+        end
+        marksNote:ClearAllPoints()
+        marksNote:SetPoint("TOPLEFT", showForms and formLine or kindLine, "BOTTOMLEFT", 0, -10)
+
+        local colors, marks, isMark = entry.colors, ns.Range.GetMarks(Category()), {}
         for _, mark in ipairs(marks) do
             isMark[mark] = true
         end
         if #marks > 0 then
-            marksNote:SetText(L["Your range checks on enemies change answer at: %s."]:format("|cffffffff" .. ns.Yards(table.concat(marks, ", ")) .. "|r"))
+            local note = editFriendly and L["Your range checks on friendly units change answer at: %s."]
+                or L["Your range checks on enemies change answer at: %s."]
+            marksNote:SetText(note:format("|cffffffff" .. ns.Yards(table.concat(marks, ", ")) .. "|r"))
         else
             marksNote:SetText(L["No range checks found yet."])
         end
-        local name, className = ns.Colors.GetOwner()
-        if ns.char.auto then
+        local name, className = ns.Colors.GetOwner(section)
+        if entry.auto then
             status:SetText(L["Rows for %s (%s), set up automatically: they follow new spells and talents until you edit one."]:format(name, className))
         else
-            status:SetText(L["Rows for %s (%s), edited by you. \"%s\" sets them up again."]:format(name, className, L["Adjust to class & talents"]))
+            status:SetText(L["Rows for %s (%s), edited by you. \"%s\" sets them up again."]:format(name, className, L["Reset these colors"]))
         end
         for _, row in ipairs(rows) do
             row.Refresh(isMark)
@@ -565,13 +678,14 @@ local function CreateColorsPage()
 
     -- Each row's range written in its color, then the one past the last row.
     local function UpdateExamples()
-        local colors, parts = ns.char.colors, {}
+        local entry = Edited()
+        local colors, parts = entry.colors, {}
         for i, color in ipairs(colors) do
             local above = colors[i - 1]
             parts[#parts + 1] = ("|cff%s%d-%d|r"):format(ns.ColorToHex(color), above and above.distance or 0, color.distance)
         end
         local last = colors[#colors]
-        parts[#parts + 1] = ("|cff%s%d+|r"):format(ns.ColorToHex(ns.char.farColor), last and last.distance or 0)
+        parts[#parts + 1] = ("|cff%s%d+|r"):format(ns.ColorToHex(entry.farColor), last and last.distance or 0)
         examples:SetText(L["Examples:"] .. "  " .. table.concat(parts, "   "))
     end
 

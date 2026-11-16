@@ -78,6 +78,19 @@ local function SpellProbe(spellID, unit)
     return Plain(C_Spell.IsSpellInRange(spellID, unit))
 end
 
+-- Some helpful spells never answer for a unit: measured in game (2026-10-07),
+-- Aspect of the Monkey (100 yards) and Eagle Eye (50000) said nothing for a
+-- party member. A helpful spell only counts as a check once it has answered,
+-- kept in db.knownSpells like the items.
+local function HelpfulSpellProbe(spellID, unit)
+    local inRange = SpellProbe(spellID, unit)
+    if inRange ~= nil and not ns.db.knownSpells[spellID] then
+        ns.db.knownSpells[spellID] = true
+        ns.Colors.OnChecksChanged()
+    end
+    return inRange
+end
+
 -- Many listed items answer nil on WoW Forever, so an item only counts as a
 -- working check once it has answered. The ones that did are kept in
 -- db.knownItems, so the check distances are known from login on.
@@ -251,7 +264,8 @@ local function AddSpells()
                     for category, usable in pairs({ hostile = harmful, friendly = helpful }) do
                         if usable then
                             local list = minRange > 0 and minSlots[category] or slots[category]
-                            AddProbe(list, maxRange, minRange, SpellProbe, spellID, true, spell.name)
+                            AddProbe(list, maxRange, minRange, category == "friendly" and HelpfulSpellProbe or SpellProbe,
+                                spellID, true, spell.name)
                             local known = spellRanges[category]
                             known[#known + 1] = { spellID = spellID, name = spell.name, minRange = minRange, maxRange = maxRange }
                         end
@@ -350,11 +364,21 @@ function Range.Rebuild()
     end
 end
 
--- Spells and interactions answer for the units they apply to; items only
--- once seen answering.
+-- Whether a probe answers on this client: harmful spells and interactions
+-- do for the units they apply to; items and helpful spells once seen
+-- answering.
+local function ProbeWorks(probe)
+    if probe.test == ItemProbe then
+        return ns.db.knownItems[probe.arg] or false
+    elseif probe.test == HelpfulSpellProbe then
+        return ns.db.knownSpells[probe.arg] or false
+    end
+    return true
+end
+
 local function SlotWorks(slot)
     for _, probe in ipairs(slot) do
-        if probe.test ~= ItemProbe or ns.db.knownItems[probe.arg] then
+        if ProbeWorks(probe) then
             return true
         end
     end
@@ -394,7 +418,8 @@ function Range.GetReach(category)
     for _, list in ipairs({ slots and slots[category] or {}, minSlots and minSlots[category] or {} }) do
         for _, slot in ipairs(list) do
             for _, probe in ipairs(slot) do
-                if probe.test == SpellProbe and (not reach or slot.range > reach) then
+                local spell = probe.test == SpellProbe or (probe.test == HelpfulSpellProbe and ProbeWorks(probe))
+                if spell and (not reach or slot.range > reach) then
                     reach = slot.range
                 end
             end
@@ -741,10 +766,10 @@ function Range.Report(unit)
     local exact = Plain(UnitIsPlayer(unit)) and Range.GetExactDistance(unit)
     local low, high = Range.GetRange(unit, category)
     if exact then
-        Add("  " .. L["result: %s (group member); the nameplate shows %s"], ns.Yards(("%.1f"):format(exact)), (ns.FormatDistance(nil, nil, exact)))
+        Add("  " .. L["result: %s (group member); the nameplate shows %s"], ns.Yards(("%.1f"):format(exact)), (ns.FormatDistance(nil, nil, exact, ns.RowsFor(category))))
     elseif low then
         local checks = high == INF and (low .. "+") or low == high and tostring(low) or (low .. "-" .. high)
-        Add("  " .. L["result: the checks say %s; the nameplate shows %s"], ns.Yards(checks), (ns.FormatDistance(low, high)))
+        Add("  " .. L["result: the checks say %s; the nameplate shows %s"], ns.Yards(checks), (ns.FormatDistance(low, high, nil, ns.RowsFor(category))))
     else
         Add("  " .. L["result: no check answered for this unit."])
     end

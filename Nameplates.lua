@@ -44,9 +44,9 @@ end
 -- the ones set on the Colors page. The result still contains the real
 -- distance: when the range checks straddle a row's limit, the two rows are
 -- joined (8-20 becomes 5-20). to is math.huge past the last row.
-local function ToColorRanges(low, high)
+local function ToColorRanges(low, high, rows)
     local from, to = 0, INF
-    for _, color in ipairs(ns.char.colors) do
+    for _, color in ipairs(rows.colors) do
         local limit = color.distance
         -- A limit equal to high ends the range; one equal to low starts it
         -- (the check at low failed, so the unit is farther than that).
@@ -60,12 +60,20 @@ local function ToColorRanges(low, high)
     return from, to
 end
 
--- Returns the text to show and the number that picks its color.
-function ns.FormatDistance(low, high, exact)
+-- The color rows for a kind of unit (Range.GetCategory): the enemies' rows,
+-- or those of friendly and neutral units.
+function ns.RowsFor(category)
+    return category == "hostile" and ns.char or ns.friendRows
+end
+
+-- Returns the text to show and the number that picks its color. rows
+-- defaults to the enemies' rows.
+function ns.FormatDistance(low, high, exact, rows)
     local db = ns.db
+    rows = rows or ns.char
     local text, value
-    if db.format == "bands" and #ns.char.colors > 0 then
-        local from, to = ToColorRanges(exact or low, exact or high)
+    if db.format == "bands" and #rows.colors > 0 then
+        local from, to = ToColorRanges(exact or low, exact or high, rows)
         if to == INF then
             value, text = INF, from .. "+"
         else
@@ -90,8 +98,8 @@ function ns.FormatDistance(low, high, exact)
     return text, value
 end
 
-function ns.GetDistanceColor(value)
-    local rows = ns.char
+function ns.GetDistanceColor(value, rows)
+    rows = rows or ns.char
     for _, color in ipairs(rows.colors) do
         if value <= color.distance then
             return color.r, color.g, color.b
@@ -181,7 +189,7 @@ local function Update(holder, targetPlate, playerPlate)
         ns.AnchorText(text, anchor)
     end
 
-    local label, value
+    local label, value, rows
     local wanted = (db.showText or db.colorName) and plate ~= playerPlate and (not db.onlyTarget or plate == targetPlate)
         and not Plain(UnitIsGameObject(unit)) and not Plain(UnitNameplateShowsWidgetsOnly(unit))
     if wanted then
@@ -193,7 +201,8 @@ local function Update(holder, targetPlate, playerPlate)
                 low, high = ns.Range.GetRange(unit, category)
             end
             if exact or low then
-                label, value = ns.FormatDistance(low, high, exact)
+                rows = ns.RowsFor(category)
+                label, value = ns.FormatDistance(low, high, exact, rows)
                 if db.hideBeyond and value == INF then
                     label = nil
                 end
@@ -207,9 +216,10 @@ local function Update(holder, targetPlate, playerPlate)
         SetNameColor(holder)
         return
     end
-    if value ~= holder.value then
-        holder.value = value
-        holder.r, holder.g, holder.b = ns.GetDistanceColor(value)
+    -- A unit can turn from friendly to hostile (a duel): its rows change.
+    if value ~= holder.value or rows ~= holder.rows then
+        holder.value, holder.rows = value, rows
+        holder.r, holder.g, holder.b = ns.GetDistanceColor(value, rows)
         if db.colorText then
             text:SetTextColor(holder.r, holder.g, holder.b)
         else

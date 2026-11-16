@@ -72,6 +72,7 @@ ns.DEFAULTS = {
     showFriendly = true,
     onlyTarget = false,
     hideBeyond = false,    -- hide instead of showing "41+" past the last color row
+    mouseoverIcon = false, -- a mouse icon on action buttons: the unit under the mouse in range
     interval = 0.1,        -- seconds between updates
 }
 
@@ -115,8 +116,9 @@ function ns.SortColors(colors)
     table.sort(colors, function(a, b) return a.distance < b.distance end)
 end
 
--- A character's rows: colors (sorted by distance), farColor past the last
--- row, and auto, true while the rows follow the class and range checks.
+-- One section of a character's rows (see Colors.lua): colors (sorted by
+-- distance), farColor past the last row, auto, true while the rows follow
+-- the class and range checks, and for a druid form the spells it can cast.
 function ns.SanitizeRows(entry)
     local far = entry.farColor
     if IsColor(far) then
@@ -143,6 +145,32 @@ function ns.SanitizeRows(entry)
     if type(entry.auto) ~= "boolean" then
         entry.auto = true
     end
+
+    -- A druid form's rows: the spells castable in it, seen in the form.
+    if entry.spells ~= nil then
+        local spells = {}
+        if type(entry.spells) == "table" then
+            for _, spellID in ipairs(entry.spells) do
+                if type(spellID) == "number" then
+                    spells[#spells + 1] = spellID
+                end
+            end
+        end
+        entry.spells = spells
+    end
+end
+
+-- A set of IDs (items, spells) seen answering a range check, as { [id] = true }.
+local function SanitizeKnown(known)
+    local out = {}
+    if type(known) == "table" then
+        for id, answered in pairs(known) do
+            if type(id) == "number" and answered == true then
+                out[id] = true
+            end
+        end
+    end
+    return out
 end
 
 -- Replaces missing or invalid values with the defaults. Runs on the saved
@@ -176,17 +204,11 @@ function ns.Sanitize(db)
         end
     end
 
-    -- Items seen answering a range check (see Range.lua). Not a setting: it is
-    -- kept so the check distances are known from login on.
-    local knownItems = {}
-    if type(db.knownItems) == "table" then
-        for itemID, answered in pairs(db.knownItems) do
-            if type(itemID) == "number" and answered == true then
-                knownItems[itemID] = true
-            end
-        end
-    end
-    db.knownItems = knownItems
+    -- Items and helpful spells seen answering a range check (see Range.lua).
+    -- Not settings: they are kept so the check distances are known from
+    -- login on.
+    db.knownItems = SanitizeKnown(db.knownItems)
+    db.knownSpells = SanitizeKnown(db.knownSpells)
 
     if (db.version or 1) < 2 then
         for key, old in pairs(V1_DEFAULTS) do
@@ -201,17 +223,18 @@ end
 -- Every settings change ends here.
 function ns.SettingsChanged()
     ns.Nameplates.Refresh()
+    ns.MouseoverRange.Refresh()
     ns.Options.UpdatePreview()
 end
 
 function ns.ResetSettings()
-    local knownItems = ns.db.knownItems
+    local knownItems, knownSpells = ns.db.knownItems, ns.db.knownSpells
     wipe(ns.db)
     for key, value in pairs(CopyTable(ns.DEFAULTS)) do
         ns.db[key] = value
     end
     ns.Sanitize(ns.db)
-    ns.db.knownItems = knownItems
+    ns.db.knownItems, ns.db.knownSpells = knownItems, knownSpells
     ns.Colors.Setup()
     ns.SettingsChanged()
     ns.Options.Refresh()
@@ -232,7 +255,7 @@ events:SetScript("OnEvent", function(self, event, name)
     elseif event == "PLAYER_LOGIN" then
         -- Each part starts on its own, so a failure in one (reported as a normal
         -- Lua error) does not stop the others.
-        for _, init in ipairs({ ns.Range.Init, ns.Colors.Setup, ns.Nameplates.Init, ns.Options.Init }) do
+        for _, init in ipairs({ ns.Range.Init, ns.Colors.Setup, ns.Nameplates.Init, ns.MouseoverRange.Init, ns.Options.Init }) do
             xpcall(init, geterrorhandler())
         end
     end

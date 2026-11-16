@@ -82,6 +82,8 @@ local function UseV1Look(ns)
         { distance = 40, r = 0.2, g = 0.85, b = 0.3 },
     }
     ns.char.farColor = { r = 0.6, g = 0.6, b = 0.6 }
+    -- Version 1 had one set of rows for every unit.
+    ns.friendRows.auto, ns.friendRows.colors, ns.friendRows.farColor = false, CopyTable(ns.char.colors), CopyTable(ns.char.farColor)
     ns.SettingsChanged()
     ns.Options.Refresh()
 end
@@ -266,8 +268,8 @@ check(fontSlider ~= nil, "font size slider labelled")
 fontSlider:SetValue(18, true)
 eq(ns.db.fontSize, 18, "slider changes the font size")
 check(fontSlider.Text.textValue:find("18") ~= nil, "slider label shows the value")
-local radios = FindFrames(function(f) return f.kind == "CheckButton" and f.text ~= nil end)
-eq(#radios, 7, "seven radio buttons")
+local radios = FindFrames(function(f) return f.kind == "CheckButton" and f.text ~= nil and f.parent == M.mainCategory.frame end)
+eq(#radios, 7, "seven radio buttons on the main page")
 for _, r in ipairs(radios) do if r.value == "max" then r:Click() end end
 eq(ns.db.format, "max", "radio sets the format")
 local checkedCount = 0
@@ -588,7 +590,8 @@ M.Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
 Sweep("nameplate1", 45, "mage")
 
 -- The Colors page: one button to set the rows up, none of the old ones.
-eq(#Buttons("Adjust to class & talents"), 1, "one adjust button")
+eq(#Buttons("Reset these colors"), 1, "one button to reset this section")
+eq(#Buttons("Reset all colors"), 1, "one button to reset every section")
 eq(#Buttons("Reset colors"), 0, "no Reset colors button")
 eq(#Buttons("Fit to my checks"), 0, "no Fit button")
 check(FontStringWith("^Rows for Tester %(Mage%), set up automatically") ~= nil, "status: automatic")
@@ -611,7 +614,7 @@ M.picker.swatchFunc()
 local edited = Describe(ns.char)
 ns.Range.Rebuild(); ns.Colors.OnChecksChanged(); M.Advance(0)
 eq(Describe(ns.char), edited, "edited rows are not rebuilt")
-Buttons("Adjust to class & talents")[1]:Click()
+Buttons("Reset these colors")[1]:Click()
 check(ns.char.auto, "the button makes the rows automatic again")
 eq(Describe(ns.char), "8 DARK, 20 LIGHT, 28 YELLOW, 30 YELLOW, 35 ORANGE | RED", "the button sets the rows up again")
 -- The settings panel's Defaults button on the Colors page does the same.
@@ -1137,7 +1140,7 @@ for _, locale in ipairs({ "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR"
         locale .. ": report line translated: " .. WindowText():sub(-120))
     check(FontStringPlain(L["Press Ctrl+A, then Ctrl+C, to copy the text."]) ~= nil, locale .. ": the window's hint translated")
     -- Buttons fit their translated text.
-    for _, f in ipairs(FindFrames(function(f) return f.kind == "Button" and f.textValue == L["Adjust to class & talents"] end)) do
+    for _, f in ipairs(FindFrames(function(f) return f.kind == "Button" and (f.textValue == L["Reset these colors"] or f.textValue == L["Reset all colors"]) end)) do
         check(f.w >= #f.textValue * 6 + 24, locale .. ": adjust button fits its text")
     end
     eq(#M.errors, 0, locale .. ": no errors")
@@ -1696,6 +1699,216 @@ do
     SlashCmdList.NAMEPLATEDISTANCE("check")
     check(not WindowText():find("Pet") and not WindowText():find("Eyes of the Beast"), "/npd check lists no pet spell: " .. WindowText())
     eq(#M.errors, 0, "no errors with the pet spells")
+end
+
+---------------------------------------------------------------------------
+-- Session 15: rows of their own for friendly units; any druid form editable.
+---------------------------------------------------------------------------
+do
+    -- A radio button of the Colors page (the main page's outline "None" is "" too).
+    local function Radio(value)
+        return FindFrames(function(f)
+            return f.kind == "CheckButton" and f.text ~= nil and f.value == value and f.parent ~= M.mainCategory.frame
+        end)[1]
+    end
+    local function RowEdits()
+        return FindFrames(function(f) return f.kind == "EditBox" and f.template == "InputBoxTemplate" end)
+    end
+    local function Band(rows, d)
+        local from = 0
+        for _, c in ipairs(rows.colors) do
+            if d <= c.distance then return from .. "-" .. c.distance .. " yd", c end
+            from = c.distance
+        end
+        return from .. "+ yd", rows.farColor
+    end
+
+    -- A mage with Heal and Fortitude for friendly units, and Eagle Eye, which
+    -- never answers for a unit (seen in game, with Aspect of the Monkey).
+    ns = NewSession()
+    local spells = CopyTable(M.spells)
+    spells[#spells + 1] = { id = 6197, name = "Eagle Eye", min = 0, max = 50000, helpful = true, selfOnly = true }
+    M.SetSpells(spells)
+    Login(ns)
+    check(ns.friendRows ~= nil and ns.friendRows ~= ns.char, "friendly units have rows of their own")
+    check(ns.db.characters["Tester-Mock Realm#friendly"] == ns.friendRows, "saved as Name-Realm#friendly")
+    eq(MarksText(ns.Range.GetMarks("friendly")), "8,28", "before any helpful spell answered: the interactions")
+    eq(Describe(ns.friendRows), "8 DARK, 28 ORANGE | RED", "friendly rows: green up close to orange, red past")
+    -- A friendly unit: the helpful spells and items answer, and count from then on.
+    M.AddUnit("nameplate1", { d = 25, friendly = true, name = "Guard" })
+    M.Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    M.Tick(0.2)
+    M.Advance(0)
+    M.Tick(0.2)
+    check(ns.db.knownSpells[106] and ns.db.knownSpells[107] and not ns.db.knownSpells[6197], "helpful spells known once they answered, Eagle Eye never")
+    eq(MarksText(ns.Range.GetMarks("friendly")), "8,15,28,30,40", "friendly checks: interactions, items, Fortitude 30 and Heal 40, not Eagle Eye")
+    eq(Describe(ns.friendRows), "8 DARK, 15 LIGHT, 28 YELLOW, 30 YELLOW, 40 ORANGE | RED", "friendly rows up to Heal, red past it")
+    local shown, row = Band(ns.friendRows, 25)
+    eq(PlateText("nameplate1"), shown, "a friendly unit shows the friendly rows")
+    local text = select(2, PlateText("nameplate1"))
+    eq(ns.ColorToHex({ r = text.color[1], g = text.color[2], b = text.color[3] }), ns.ColorToHex(row), "in the friendly row's color")
+    M.AddUnit("nameplate2", { d = 25, hostile = true, name = "Kobold" })
+    M.Fire("NAME_PLATE_UNIT_ADDED", "nameplate2")
+    M.Tick(0.2)
+    eq(PlateText("nameplate2"), ExpectedBand(25), "an enemy shows the enemies' rows")
+
+    -- The Colors page: one section or the other, each with its own reset.
+    check(Radio(false).checked and not Radio(true).checked, "the Colors page starts on the enemies")
+    Radio(true):Click()
+    check(Radio(true).checked, "the friendly section picked")
+    check(FontStringWith("^Your range checks on friendly units change answer at: ") ~= nil, "it lists the friendly checks")
+    check(FontStringWith("Friendly and neutral units: green up close to red past your longest helpful spell") ~= nil, "the intro explains the friendly rows")
+    local edits = RowEdits()
+    edits[1]:SetFocus(); edits[1]:SetText("12"); edits[1]:ClearFocus()
+    check(not ns.friendRows.auto and ns.char.auto, "editing the friendly rows leaves the enemies' alone")
+    eq(ns.friendRows.colors[1].distance, 12, "the friendly row edited")
+    check(FontStringWith("^Rows for Tester %(Mage%), edited by you%. \"Reset these colors\" sets them up again%.") ~= nil, "status: edited")
+    Radio(false):Click()
+    check(FontStringWith("^Rows for Tester %(Mage%), set up automatically") ~= nil, "back on the enemies: still automatic")
+    edits[1]:SetFocus(); edits[1]:SetText("6"); edits[1]:ClearFocus()
+    check(not ns.char.auto, "the enemies' rows edited too")
+    Buttons("Reset these colors")[1]:Click()
+    check(ns.char.auto and not ns.friendRows.auto, "Reset these colors: only the section shown")
+    edits[1]:SetFocus(); edits[1]:SetText("6"); edits[1]:ClearFocus()
+    Buttons("Reset all colors")[1]:Click()
+    check(ns.char.auto and ns.friendRows.auto, "Reset all colors: both sections")
+    eq(Describe(ns.friendRows), "8 DARK, 15 LIGHT, 28 YELLOW, 30 YELLOW, 40 ORANGE | RED", "the friendly rows set up again")
+    ns.char.auto, ns.friendRows.auto = false, false
+    M.subCategory.frame:OnDefault()
+    check(ns.char.auto and ns.friendRows.auto, "the settings panel's Defaults button resets every section")
+    eq(#M.errors, 0, "no errors with friendly rows")
+
+    -- A druid edits the rows of any form from any form.
+    local function Druid(saved)
+        ns = NewSession({ saved = saved })
+        M.class, M.playerName = "DRUID", "Leaf"
+        M.SetSpells({
+            { id = 5176, name = "Wrath", min = 0, max = 30, harmful = true, usableIn = { caster = true } },
+            { id = 16979, name = "Feral Charge", min = 8, max = 25, harmful = true, usableIn = { bear = true } },
+            { id = 49376, name = "Feral Charge - Cat", min = 8, max = 25, harmful = true, usableIn = { cat = true } },
+            { id = 1082, name = "Claw", min = 0, max = 0, harmful = true, melee = true, usableIn = { cat = true } },
+            { id = 768, name = "Cat Form", min = 0, max = 0 },
+            { id = 5487, name = "Bear Form", min = 0, max = 0 },
+        })
+        M.forms = { { formID = 5, spellID = 5487 }, { formID = 1, spellID = 768 } }
+        M.actions[73] = 1082
+        Login(ns)
+    end
+    Druid(nil)
+    check(Radio("") and Radio("cat") and Radio("bear"), "a druid picks the form to edit")
+    check(Radio("").checked, "the form in use is picked")
+    eq(Radio("").text.textValue, "Caster form", "the caster form's name")
+    eq(Radio("bear").text.textValue, "Bear Form", "the other forms by their spell's name")
+    -- Bear rows from caster form, before ever being a bear: melee only.
+    Radio("bear"):Click()
+    check(FontStringWith("^Rows for Leaf %(Druid, Bear Form%), set up automatically") ~= nil, "the bear rows shown in caster form")
+    local bear = ns.db.characters["Leaf-Mock Realm#bear"]
+    eq(Describe(bear), "5 DARK, 8 RED, 25 RED, 28 RED, 30 RED | RED", "a form never visited: green in melee, red past it")
+    edits = RowEdits()
+    edits[3]:SetFocus(); edits[3]:SetText("20"); edits[3]:ClearFocus()
+    check(not bear.auto, "the bear rows edited from caster form")
+    check(rawequal(ns.char, ns.db.characters["Leaf-Mock Realm"]) and ns.char.auto, "the rows in use are still the caster's")
+    -- Shifting into bear form uses them, and the page follows the form.
+    M.SetForm(1)
+    check(rawequal(ns.char, bear), "bear form: the rows edited in caster form")
+    eq(Limits12(), "5,8,20,28,30", "with the edit")
+    M.SetForm(2)
+    M.Advance(0.6)
+    check(Radio("cat").checked, "the page follows the form")
+    M.SetForm(nil)
+    M.Advance(0.6)
+    check(Radio("").checked, "and back")
+    -- The cat rows from caster form: the spells seen in cat form.
+    Radio("cat"):Click()
+    local cat = ns.db.characters["Leaf-Mock Realm#cat"]
+    eq(Describe(cat), "5 DARK, 8 RED, 25 LIGHT, 28 RED, 30 RED | RED", "the cat's charge, seen in cat form, shown in caster form")
+    -- The forms only apply to the enemies.
+    Radio(true):Click()
+    check(not Radio("cat").parent.shown, "no forms for friendly units")
+    check(FontStringWith("^Rows for Leaf %(Druid%), set up automatically") ~= nil, "friendly rows: the druid's own")
+    Radio(false):Click()
+    check(Radio("cat").parent.shown, "the forms again for the enemies")
+    -- Reset all colors: every form, from the spells each form was seen with.
+    Buttons("Reset all colors")[1]:Click()
+    check(bear.auto, "the bear rows automatic again")
+    eq(Describe(bear), "5 DARK, 8 RED, 25 LIGHT, 28 RED, 30 RED | RED", "the bear's charge, seen in bear form")
+    -- The spells seen in a form are kept in the saved settings.
+    Druid(CopyTable(ns.db))
+    Radio("cat"):Click()
+    eq(Describe(ns.db.characters["Leaf-Mock Realm#cat"]), "5 DARK, 8 RED, 25 LIGHT, 28 RED, 30 RED | RED", "next session: the cat rows still know its charge")
+    eq(#M.errors, 0, "no errors for the druid's forms")
+end
+
+---------------------------------------------------------------------------
+-- Session 16: the mouseover range icon on the action buttons.
+---------------------------------------------------------------------------
+do
+    local function MouseIcon(button)
+        for _, region in ipairs(M.allRegions) do
+            if region.parent == button and region.atlas == "ClickCast-Icon-Mouse" then return region end
+        end
+    end
+    -- "none", "in range" (the key's color) or "out" (red).
+    local function IconState(button)
+        local icon = MouseIcon(button)
+        if not icon or not icon.shown then return "none" end
+        return icon.vertex[1] == 1 and "out" or "in range"
+    end
+
+    ns = NewSession()
+    M.class = "HUNTER"
+    M.SetSpells(CopyTable(HUNTER_SPELLS))
+    -- Arcane Shot (41 yd) and Wing Clip (5 yd) with a key, Hunter's Mark
+    -- (100 yd) without one, and a key on an empty slot.
+    M.actions[1], M.actions[2], M.actions[3] = 202, 205, 204
+    local shot, clip, mark, empty = M.AddActionButton(1, "1"), M.AddActionButton(2, "2"), M.AddActionButton(3), M.AddActionButton(4, "4")
+    Login(ns)
+    eq(ns.db.mouseoverIcon, false, "the mouseover icon is off by default")
+    M.AddUnit("nameplate1", { d = 20, hostile = true, name = "Boar" })
+    M.Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    M.mouseover = "nameplate1"
+    M.Fire("UPDATE_MOUSEOVER_UNIT")
+    M.Tick(0.2)
+    eq(IconState(shot), "none", "off: no icon")
+
+    -- Turned on from the options.
+    local box
+    for _, f in ipairs(M.allFrames) do
+        if f.kind == "CheckButton" and rawget(f, "Text") and f.Text.textValue == "Mouseover range icon" then box = f end
+    end
+    check(box ~= nil, "the option is on the main page")
+    check(FontStringWith("^Action Bars$") ~= nil, "under the game's own Action Bars heading")
+    box:SetChecked(true); box.scripts.OnClick(box)
+    eq(ns.db.mouseoverIcon, true, "the checkbox turns it on")
+    eq(IconState(shot), "in range", "the boar at 20 yd: in range of Arcane Shot, at once")
+    eq(IconState(clip), "out", "out of Wing Clip's range: red")
+    eq(IconState(mark), "none", "no icon on a button without a key")
+    eq(IconState(empty), "none", "no icon on an empty slot")
+    local icon = MouseIcon(shot)
+    check(icon.desaturated and icon.points[1][1] == "BOTTOMLEFT" and icon.points[1][2] == shot and icon.w == 16,
+        "in the lower left corner, a third of the button's size")
+    -- The unit moves; the mouse leaves it with no event.
+    M.units.nameplate1.d = 3
+    M.Tick(0.2)
+    eq(IconState(clip), "in range", "the boar at 3 yd: in Wing Clip's range")
+    M.units.nameplate1.d = 50
+    M.Tick(0.2)
+    eq(IconState(shot), "out", "the boar at 50 yd: out of Arcane Shot's range")
+    M.mouseover = nil
+    M.Tick(0.2)
+    check(IconState(shot) == "none" and IconState(clip) == "none", "the mouse off the unit: no icons")
+    -- A key bound later; a hidden button.
+    M.mouseover = "nameplate1"
+    mark.HotKey:SetText("3")
+    M.Tick(0.2)
+    eq(IconState(mark), "in range", "a key bound later: Hunter's Mark reaches the boar at 50 yd")
+    shot:Hide()
+    M.Tick(0.2)
+    eq(IconState(shot), "none", "no icon on a hidden button")
+    -- Turned off: the icons go at once.
+    box:SetChecked(false); box.scripts.OnClick(box)
+    check(IconState(mark) == "none" and IconState(clip) == "none", "turned off: every icon goes")
+    eq(#M.errors, 0, "no errors with the mouseover icon")
 end
 
 ---------------------------------------------------------------------------

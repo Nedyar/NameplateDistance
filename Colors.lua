@@ -1,11 +1,19 @@
 -- Colors.lua: each character's color rows, set up from its class and from its
 -- range checks, whose ranges already include its talents.
 --
--- The rows' limits are distances at which the checks change answer
--- (Range.GetMarks), so the ranges on the nameplates are exactly the rows.
--- A band narrower than MIN_BAND yards (40-41) joins the next one.
--- A 0-5 row, when there is one, is the melee reach; for the target it is the
--- real reach its melee buttons give (see Range.lua).
+-- Rows come in sections: one for enemies (one per druid form, each editable
+-- from any form) and one for friendly and neutral units (FRIENDLY), each from
+-- the checks of its kind of unit. The rows' limits are distances at which
+-- those checks change answer (Range.GetMarks), so the ranges on the nameplates
+-- are exactly the rows. A band narrower than MIN_BAND yards (40-41) joins the
+-- next one.
+--
+-- Friendly and neutral units: green up close, then light green, yellow and
+-- orange up to the longest helpful spell (or the farthest check without
+-- one), and red past it.
+--
+-- Enemies: a 0-5 row, when there is one, is the melee reach; for the target
+-- it is the real reach its melee buttons give (see Range.lua).
 --   * Hunters shoot from a minimum range: green within melee reach, red in
 --     the dead zone between it and that minimum (one row), orange through
 --     dark green and back to orange across the shooting range, red past it,
@@ -19,10 +27,12 @@
 --   * Every other class can also fight up close: dark green near, then light
 --     green, yellow and orange up to the longest range of its spells, and
 --     red past it (items can still tell 35-40 from 40+, both out of reach).
--- Until the player edits a row, the rows are rebuilt whenever the checks
--- change: new spells, talents, or an item answering for the first time.
+-- Until the player edits a row of a section, its rows are rebuilt whenever
+-- the checks change: new spells, talents, or an item or a helpful spell
+-- answering for the first time.
 local _, ns = ...
 local Plain = ns.Plain
+local L = ns.L
 local P = ns.PALETTE
 
 local Colors = {}
@@ -30,6 +40,8 @@ ns.Colors = Colors
 
 local MIN_BAND = 2
 local MELEE_RANGE = 5
+local FRIENDLY = "friendly"     -- the section of friendly and neutral units
+Colors.FRIENDLY = FRIENDLY
 
 -- From the edges of the shooting range to its middle.
 local SHOOTING = { P.ORANGE, P.YELLOW, P.LIGHT_GREEN, P.DARK_GREEN }
@@ -246,14 +258,103 @@ function Colors.GetSet()
     return set or ""
 end
 
--- The rows and the color past them for this character, as they are now.
-function Colors.Build()
+-- A druid's forms with rows of their own, for the Colors page, as { set,
+-- name }; nil for other classes.
+function Colors.GetForms()
+    if ClassFile() ~= "DRUID" then
+        return nil
+    end
+    local function Name(spellID, fallback)
+        local info = C_Spell.GetSpellInfo(spellID)
+        return info and info.name or fallback
+    end
+    return {
+        { set = "", name = L["Caster form"] },
+        { set = "cat", name = Name(768, "Cat Form") },
+        { set = "bear", name = Name(5487, "Bear Form") },
+    }
+end
+
+-- Every section of this character's rows: one for enemies (one per druid
+-- form), and one for friendly and neutral units.
+function Colors.GetSections()
+    local sections = {}
+    for _, form in ipairs(Colors.GetForms() or { { set = "" } }) do
+        sections[#sections + 1] = form.set
+    end
+    sections[#sections + 1] = FRIENDLY
+    return sections
+end
+
+-- The key of a section in db.characters: "Name-Realm" for enemies,
+-- "Name-Realm#cat" and "Name-Realm#bear" for enemies in a druid's forms, and
+-- "Name-Realm#friendly" for friendly and neutral units. section defaults to
+-- the enemies' one in use.
+function Colors.GetKey(section)
+    local key = (Plain(UnitName("player")) or "?") .. "-" .. (Plain(GetRealmName()) or "?")
+    section = section or Colors.GetSet()
+    return section == "" and key or key .. "#" .. section
+end
+
+-- The rows saved under key, started empty and automatic when missing.
+function Colors.GetEntry(key)
+    local entry = ns.db.characters[key]
+    if not entry then
+        entry = { auto = true }
+        ns.SanitizeRows(entry)
+        ns.db.characters[key] = entry
+    end
+    return entry
+end
+
+-- In a druid form: the spells it can cast now, kept in its rows
+-- (entry.spells), edited or not, so they can be set up from any form.
+local function RememberFormSpells()
+    local section = Colors.GetSet()
+    if section == "" then
+        return
+    end
+    local spells = {}
+    for _, spell in ipairs(ns.Range.GetSpells("hostile")) do
+        if CanCastNow(spell.spellID) then
+            spells[#spells + 1] = spell.spellID
+        end
+    end
+    Colors.GetEntry(Colors.GetKey(section)).spells = spells
+end
+
+-- Which spells a druid form can cast: read now in the form, else those seen
+-- in it last time; a form never visited knows none, and gets the plain melee
+-- rows until then.
+local function FormSpells(section)
+    if section == Colors.GetSet() then
+        RememberFormSpells()
+    end
+    local entry = Colors.GetEntry(Colors.GetKey(section))
+    local usable = {}
+    for _, spellID in ipairs(entry.spells or {}) do
+        usable[spellID] = true
+    end
+    return function(spellID)
+        return usable[spellID] or false
+    end
+end
+
+-- The rows and the color past them for a section, as they are now; section
+-- defaults to the enemies' one in use.
+function Colors.Build(section)
+    section = section or Colors.GetSet()
+    local rows, far
+    if section == FRIENDLY then
+        local reach = ns.Range.GetReach("friendly")
+        rows, far = OtherRows(DropNarrow(ns.Range.GetMarks("friendly"), reach and { [reach] = true } or {}), reach)
+        return Shorten(rows), CopyTable(far)
+    end
     local marks = ns.Range.GetMarks("hostile")
     local shotMin, shotMax = ns.Range.GetShotRange()
-    local classFile, set = ClassFile(), Colors.GetSet()
-    local rows, far
-    if MELEE_CLASSES[classFile] or set ~= "" then
-        rows, far = MeleeRows(marks, MeleeReach(set ~= "" and CanCastNow or nil))
+    local classFile = ClassFile()
+    if MELEE_CLASSES[classFile] or section ~= "" then
+        rows, far = MeleeRows(marks, MeleeReach(section ~= "" and FormSpells(section) or nil))
     elseif classFile == "HUNTER" and shotMax then
         -- Below the shooting range only the melee reach matters: the longest
         -- check within it ends the green row, and the dead zone after it is
@@ -281,35 +382,13 @@ function Colors.Build()
     return Shorten(rows), CopyTable(far)
 end
 
--- The key of a set of rows in db.characters: "Name-Realm", and for a druid's
--- forms "Name-Realm#cat" and "Name-Realm#bear". set defaults to the one in use.
-function Colors.GetKey(set)
-    local key = (Plain(UnitName("player")) or "?") .. "-" .. (Plain(GetRealmName()) or "?")
-    set = set or Colors.GetSet()
-    return set == "" and key or key .. "#" .. set
-end
-
--- The rows saved under key, started empty and automatic when missing.
-function Colors.GetEntry(key)
-    local entry = ns.db.characters[key]
-    if not entry then
-        entry = { auto = true }
-        ns.SanitizeRows(entry)
-        ns.db.characters[key] = entry
-    end
-    return entry
-end
-
--- Name and class of the character the rows belong to, for the Colors page;
--- in a druid form, the class comes with the form's name.
-function Colors.GetOwner()
+-- Name and class of the character a section belongs to, for the Colors page;
+-- for a druid form, the class comes with the form's name.
+function Colors.GetOwner(section)
     local name, className = Plain(UnitName("player")) or "?", Plain(UnitClass("player")) or "?"
-    if Colors.GetSet() ~= "" then
-        local index = Plain(GetShapeshiftForm())
-        local spellID = index and index > 0 and Plain((select(4, GetShapeshiftFormInfo(index))))
-        local info = spellID and C_Spell.GetSpellInfo(spellID)
-        if info and info.name then
-            className = className .. ", " .. info.name
+    for _, form in ipairs(Colors.GetForms() or {}) do
+        if form.set ~= "" and form.set == section then
+            className = className .. ", " .. form.name
         end
     end
     return name, className
@@ -327,13 +406,13 @@ local function SameRows(a, b)
     return true
 end
 
--- Rebuilds rows that follow the checks; true when they changed.
-function Colors.Update()
-    local entry = ns.char
-    if not (entry and entry.auto) then
+-- Rebuilds a section's rows if they follow the checks; true when they changed.
+local function UpdateSection(section)
+    local entry = Colors.GetEntry(Colors.GetKey(section))
+    if not entry.auto then
         return false
     end
-    local rows, far = Colors.Build()
+    local rows, far = Colors.Build(section)
     if SameRows(rows, entry.colors) and SameColor(far, entry.farColor) then
         return false
     end
@@ -341,13 +420,31 @@ function Colors.Update()
     return true
 end
 
-local currentKey, formEvents
+local currentSet, formEvents
+
+-- Rebuilds the rows in use that follow the checks; true when they changed.
+-- In a druid form, also notes what it can cast.
+function Colors.Update()
+    RememberFormSpells()
+    local enemies = UpdateSection(currentSet)
+    local friendly = UpdateSection(FRIENDLY)
+    return enemies or friendly
+end
+
+-- A section's rows for the Colors page, rebuilt first if they follow the
+-- checks: a druid form's can be shown from another form.
+function Colors.GetRows(section)
+    UpdateSection(section)
+    return Colors.GetEntry(Colors.GetKey(section))
+end
 
 -- At login, after a reset and on a change of form: finds the rows in use,
--- or starts them.
+-- or starts them. ns.char holds the enemies' rows, ns.friendRows those of
+-- friendly and neutral units.
 function Colors.Setup()
-    currentKey = Colors.GetKey()
-    ns.char = Colors.GetEntry(currentKey)
+    currentSet = Colors.GetSet()
+    ns.char = Colors.GetEntry(Colors.GetKey(currentSet))
+    ns.friendRows = Colors.GetEntry(Colors.GetKey(FRIENDLY))
     Colors.Update()
     if not formEvents then
         formEvents = CreateFrame("Frame")
@@ -358,7 +455,7 @@ end
 
 -- A druid's cat and bear forms have rows of their own.
 function Colors.OnFormChanged()
-    if Colors.GetKey() ~= currentKey then
+    if Colors.GetSet() ~= currentSet then
         Colors.Setup()
         ns.SettingsChanged()
         ns.Options.Refresh()
@@ -372,11 +469,20 @@ function Colors.OnFormChanged()
     end)
 end
 
--- The Colors page button: rows set up again for the class and talents, and
--- following the checks from now on.
-function Colors.Adjust()
-    ns.char.auto = true
-    Colors.Update()
+-- The Colors page buttons: rows set up again for the class and talents, and
+-- following the checks from now on; one section, or all of them.
+function Colors.Adjust(section)
+    Colors.GetEntry(Colors.GetKey(section)).auto = true
+    UpdateSection(section)
+    ns.SettingsChanged()
+    ns.Options.Refresh()
+end
+
+function Colors.AdjustAll()
+    for _, section in ipairs(Colors.GetSections()) do
+        Colors.GetEntry(Colors.GetKey(section)).auto = true
+        UpdateSection(section)
+    end
     ns.SettingsChanged()
     ns.Options.Refresh()
 end
@@ -385,7 +491,7 @@ local pending = false
 
 -- Called by Range when the checks change.
 function Colors.OnChecksChanged()
-    if pending or not (ns.char and ns.char.auto) then
+    if pending or not ((ns.char and ns.char.auto) or (ns.friendRows and ns.friendRows.auto)) then
         return
     end
     pending = true

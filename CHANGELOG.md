@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- **Colors of their own for friendly and neutral units**: green up close to red past your longest helpful spell, set up from the checks that work on friendly units. The Colors page switches between the enemies' rows and theirs.
+- **Druids edit any form's colors from any form**: the Colors page picks caster, cat or bear form for the enemies' rows, without shifting.
+- **Two reset buttons**: Reset these colors sets up again the rows shown; Reset all colors, every set of rows of the character.
+- **Mouseover range icon** (Action Bars, off by default): while the mouse is over a unit, action buttons with a key bound show a small mouse icon, in the key's color when the unit is within that ability's range and red when it is not.
+- Helpful spells that never answer for a unit (Eagle Eye, Aspect of the Monkey) no longer count as range checks.
+
 ## 0.4.2
 
 - **Right distances for friendly units**: spells cast on your pet (Dismiss Pet, Mend Pet, Eyes of the Beast...) answer for your pet, not for the unit asked about, so friendly units far away showed 8-10 yd (0-10 yd in combat). They are no longer used to measure.

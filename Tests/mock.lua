@@ -39,13 +39,14 @@ local KNOWN_EVENTS = {}
 for _, e in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_LOGOUT", "PLAYER_ENTERING_WORLD",
     "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "SPELLS_CHANGED", "PLAYER_TALENT_UPDATE",
     "TRAIT_CONFIG_UPDATED", "CHARACTER_POINTS_CHANGED", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
-    "ACTIONBAR_SLOT_CHANGED", "ACTION_RANGE_CHECK_UPDATE", "PLAYER_TARGET_CHANGED", "UPDATE_SHAPESHIFT_FORM" }) do
+    "ACTIONBAR_SLOT_CHANGED", "ACTION_RANGE_CHECK_UPDATE", "PLAYER_TARGET_CHANGED", "UPDATE_SHAPESHIFT_FORM", "UPDATE_MOUSEOVER_UNIT" }) do
     KNOWN_EVENTS[e] = true
 end
 
 local Common = {}
 function Common:SetSize(w, h) self.w, self.h = w, h end
 function Common:SetWidth(w) self.w = w end
+function Common:GetWidth() return self.w or 0 end
 function Common:SetHeight(h) self.h = h end
 function Common:SetPoint(...) self.points = self.points or {}; self.points[#self.points + 1] = { ... } end
 function Common:ClearAllPoints() self.points = {} end
@@ -173,6 +174,9 @@ local FontStringMeta = { __index = strictIndex(FontString, "FontString") }
 
 local Texture = setmetatable({}, { __index = Common })
 function Texture:SetColorTexture(r, g, b, a) self.color = { r, g, b, a } end
+function Texture:SetAtlas(atlas) self.atlas = atlas end
+function Texture:SetDesaturated(desaturated) self.desaturated = desaturated end
+function Texture:SetVertexColor(r, g, b) self.vertex = { r, g, b } end
 local TextureMeta = { __index = strictIndex(Texture, "Texture") }
 
 function NewRegion(kind, parent, template)
@@ -261,6 +265,7 @@ function InCombatLockdown() return M.combat end
 -- Units: M.units[token] = { d = yards, hostile, friendly, player, group, name }
 local function U(unit)
     if unit == "target" then unit = M.target end
+    if unit == "mouseover" then unit = M.mouseover end
     return unit and M.units[unit]
 end
 function UnitExists(unit) return U(unit) ~= nil end
@@ -379,6 +384,8 @@ C_Spell = {
         local s, u = spellByID[id], U(unit)
         if M.throwOnSpell then error("simulated API failure") end
         if not u then return nil end
+        -- As Eagle Eye and Aspect of the Monkey on Forever: never for a unit.
+        if s.selfOnly then return nil end
         -- As on Forever, a spell cast on the pet answers for the pet (M.petDistance).
         if s.pet then
             if not M.petDistance then return nil end
@@ -514,6 +521,25 @@ C_NamePlate = {
 }
 
 -- Settings panel and color picker
+-- Blizzard's action buttons (ActionButton.lua): registered in
+-- ActionBarButtonEventsFrame.frames, the action slot in button.action, the
+-- key in HotKey, or RANGE_INDICATOR without one. Colors as the client makes them.
+RANGE_INDICATOR = "\226\151\143"
+ACTIONBARS_LABEL = "Action Bars"
+local function Color(r, g, b) return { GetRGB = function() return r, g, b end } end
+ACTIONBAR_HOTKEY_FONT_COLOR = Color(0.6, 0.6, 0.6)
+RED_FONT_COLOR = Color(1, 0.125, 0.125)
+ActionBarButtonEventsFrame = { frames = {} }
+function M.AddActionButton(slot, key)
+    local button = CreateFrame("CheckButton", "ActionButton" .. slot)
+    button:SetSize(45, 45)
+    button.action = slot
+    button.HotKey = button:CreateFontString(nil, "ARTWORK", "NumberFontNormalSmallGray")
+    button.HotKey:SetText(key or RANGE_INDICATOR)
+    table.insert(ActionBarButtonEventsFrame.frames, button)
+    return button
+end
+
 SettingsPanel = CreateFrame("Frame")
 SettingsPanel.shown = false
 local nextCategory = 0
